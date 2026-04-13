@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse
 from pypdf import PdfReader
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from google.genai import types
 
 from app.rag_core import (
     LegalRAGPipeline,
@@ -48,7 +49,7 @@ from app.schemas import (
     PipelineStatusResponse,
     SingleClauseRequest,
 )
-from app.session_store import ChatSessionStore
+from app.session_store import create_chat_session_store, ChatSessionState, SessionStore
 from app.settings import get_settings
 
 settings = get_settings()
@@ -63,10 +64,7 @@ logger = logging.getLogger(__name__)
 # Application state
 # ---------------------------------------------------------------------------
 pipeline: LegalRAGPipeline | None = None
-chat_sessions = ChatSessionStore(
-    ttl_seconds=settings.session_ttl_seconds,
-    max_sessions=settings.max_chat_sessions,
-)
+chat_sessions: SessionStore = create_chat_session_store(settings)
 
 
 def _request_id_from(request: Request) -> str:
@@ -74,9 +72,36 @@ def _request_id_from(request: Request) -> str:
     return getattr(request.state, "request_id", "unknown")
 
 
+# ---------------------------------------------------------------------------
+# Serialization Helpers for Redis
+# ---------------------------------------------------------------------------
+def dump_history(history: list[types.Content] | None) -> list[dict[str, Any]]:
+    """Converts Gemini Content objects into JSON-safe dictionaries."""
+    if not history:
+        return []
+    return [
+        {
+            "role": h.role,
+            "parts": [{"text": p.text} for p in h.parts if p.text]
+        }
+        for h in history
+    ]
+
+
+def load_history(raw_history: list[dict[str, Any]]) -> list[types.Content]:
+    """Converts JSON dictionaries back into Gemini Content objects."""
+    return [
+        types.Content(
+            role=msg["role"],
+            parts=[types.Part.from_text(text=part["text"]) for part in msg.get("parts", [])]
+        )
+        for msg in raw_history
+    ]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Initialise the RAG pipeline once on startup."""
+    """Initialise the RAG pipeline and Redis connection once on startup."""
     global pipeline
 
     if not settings.gemini_api_key or settings.gemini_api_key == "your_api_key_here":
@@ -89,12 +114,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.environment,
     )
     pipeline = LegalRAGPipeline(gemini_api_key=settings.gemini_api_key)
+    
+    # Start Redis connection
+    await chat_sessions.startup()
+    
     app.state.started_at = time.time()
     logger.info("Pipeline ready - server accepting requests.")
 
     yield
 
-    chat_sessions.clear()
+    # Clean up Redis connection on shutdown
+    await chat_sessions.close()
     logger.info("Shutting down.")
 
 
@@ -382,8 +412,26 @@ async def analyze_contract(file: UploadFile = File(...)) -> ContractAnalysisResp
             len(clauses),
         )
 
+    # ---------------------------------------------------------
+    # NEW PDF FLOW: Build a fresh session state for Redis
+    # ---------------------------------------------------------
     session_id = str(uuid.uuid4())
-    chat_sessions.set(session_id, pipe.create_chat_session(contract_text))
+    system_instruction = (
+        "You are an expert Indian legal assistant. The user has uploaded an "
+        "employment contract. Answer any questions about the contract. "
+        f"Here is the contract text:\n\n{contract_text}"
+    )
+
+    initial_state: ChatSessionState = {
+        "model_name": pipe.model_name or _GEMINI_MODEL_NAME,
+        "chat_config": {"system_instruction": system_instruction},
+        "history": [],
+        "created_at": time.time(),
+        "updated_at": time.time()
+    }
+
+    await chat_sessions.set(session_id, initial_state)
+    
     return ContractAnalysisResponse(session_id=session_id, results=results)
 
 
@@ -395,15 +443,37 @@ async def analyze_contract(file: UploadFile = File(...)) -> ContractAnalysisResp
 )
 async def chat_with_contract(request: ChatRequest) -> ChatResponse:
     """Send a question within an active document chat session."""
-    chat = chat_sessions.get(request.session_id)
-    if chat is None:
+    pipe = _require_pipeline()
+    
+    # 1. Fetch JSON state from Redis
+    state = await chat_sessions.get(request.session_id)
+    if state is None:
         raise HTTPException(
             status_code=404,
             detail="Session not found. It may have expired or not exist.",
         )
 
     try:
+        # 2. Reconstruct the Gemini Chat Session from the saved JSON
+        history = load_history(state["history"])
+        config = types.GenerateContentConfig(
+            system_instruction=state["chat_config"]["system_instruction"],
+            temperature=0.3,
+        )
+        chat = pipe.client.aio.chats.create(
+            model=state["model_name"],
+            config=config,
+            history=history
+        )
+
+        # 3. Process the new user message
         response = await chat.send_message_async(request.message)
+
+        # 4. Serialize the updated history back to Redis
+        state["history"] = dump_history(chat.history)
+        state["updated_at"] = time.time()
+        await chat_sessions.set(request.session_id, state)
+
         return ChatResponse(response=response.text)
     except Exception as exc:
         logger.error("Failed to process chat message: %s", exc)

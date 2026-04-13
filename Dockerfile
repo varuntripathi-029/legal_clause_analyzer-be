@@ -7,7 +7,10 @@ ENV PIP_NO_CACHE_DIR=1
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Install the CPU-only version of PyTorch first, then install the rest
+RUN pip install --upgrade pip && \
+    pip install torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install -r requirements.txt
 
 COPY app ./app
 COPY data ./data
@@ -16,5 +19,5 @@ COPY .env.example ./.env.example
 
 EXPOSE 8000
 
-# Keep a single worker because active chat sessions are stored in process memory.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Chat sessions are backed by Redis, so we can safely run multiple workers!
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
