@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     max_clauses_per_document: int = 100
     session_ttl_seconds: int = 60 * 60
     max_chat_sessions: int = 250
+    redis_url: str = ""
+    redis_key_prefix: str = "legal-clause-analyzer"
 
     @field_validator("cors_origins", "trusted_hosts", mode="before")
     @classmethod
@@ -84,10 +86,10 @@ class Settings(BaseSettings):
         """Provide a permissive fallback for local development."""
         return value or ["*"]
 
-    @field_validator("gemini_api_key")
+    @field_validator("gemini_api_key", "redis_url", "redis_key_prefix")
     @classmethod
-    def _strip_api_key(cls, value: str) -> str:
-        """Normalize whitespace around the API key."""
+    def _strip_string_settings(cls, value: str) -> str:
+        """Normalize whitespace around string settings."""
         return value.strip()
 
     @field_validator("allow_credentials")
