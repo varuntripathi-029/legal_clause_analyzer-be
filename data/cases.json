@@ -1,0 +1,372 @@
+[
+    {
+        "id": "case_001",
+        "case_name": "K.S. Puttaswamy v. Union of India",
+        "year": 2017,
+        "court": "Supreme Court of India",
+        "articles": [
+            "21"
+        ],
+        "topics": [
+            "privacy",
+            "dignity",
+            "data protection"
+        ],
+        "summary": "Right to privacy is a fundamental right under Article 21.",
+        "key_points": [
+            "Privacy is intrinsic to life and liberty",
+            "Includes informational privacy",
+            "Relevant to employer data collection and surveillance"
+        ],
+        "embedding_text": "privacy fundamental right article 21 dignity autonomy data protection surveillance employment"
+    },
+    {
+        "id": "case_002",
+        "case_name": "Maneka Gandhi v. Union of India",
+        "year": 1978,
+        "court": "Supreme Court of India",
+        "articles": [
+            "21",
+            "14"
+        ],
+        "topics": [
+            "due process",
+            "fairness",
+            "arbitrariness"
+        ],
+        "summary": "Procedure affecting life or liberty must be just, fair, and reasonable.",
+        "key_points": [
+            "Expanded scope of Article 21",
+            "Links Articles 14 and 21",
+            "Prevents arbitrary actions"
+        ],
+        "embedding_text": "fair procedure article 21 due process reasonable law arbitrariness article 14"
+    },
+    {
+        "id": "case_003",
+        "case_name": "E.P. Royappa v. State of Tamil Nadu",
+        "year": 1974,
+        "court": "Supreme Court of India",
+        "articles": [
+            "14"
+        ],
+        "topics": [
+            "equality",
+            "arbitrariness"
+        ],
+        "summary": "Arbitrariness is antithetical to equality under Article 14.",
+        "key_points": [
+            "Equality includes non-arbitrariness",
+            "State action must be fair"
+        ],
+        "embedding_text": "article 14 equality arbitrariness fairness non arbitrary action"
+    },
+    {
+        "id": "case_004",
+        "case_name": "Ajay Hasia v. Khalid Mujib",
+        "year": 1981,
+        "court": "Supreme Court of India",
+        "articles": [
+            "12",
+            "14"
+        ],
+        "topics": [
+            "state definition",
+            "instrumentality"
+        ],
+        "summary": "Expanded definition of 'State' under Article 12.",
+        "key_points": [
+            "Includes government-controlled bodies",
+            "Applies fundamental rights obligations broadly"
+        ],
+        "embedding_text": "article 12 state definition instrumentality government control article 14 applicability"
+    },
+    {
+        "id": "case_005",
+        "case_name": "Shreya Singhal v. Union of India",
+        "year": 2015,
+        "court": "Supreme Court of India",
+        "articles": [
+            "19"
+        ],
+        "topics": [
+            "free speech",
+            "vagueness"
+        ],
+        "summary": "Struck down Section 66A for violating free speech.",
+        "key_points": [
+            "Restrictions must be reasonable",
+            "Vague laws unconstitutional"
+        ],
+        "embedding_text": "freedom of speech article 19 reasonable restriction vagueness censorship unconstitutional"
+    },
+    {
+        "id": "case_006",
+        "case_name": "Bennett Coleman v. Union of India",
+        "year": 1973,
+        "court": "Supreme Court of India",
+        "articles": [
+            "19"
+        ],
+        "topics": [
+            "freedom of press"
+        ],
+        "summary": "Restrictions affecting press violate Article 19.",
+        "key_points": [
+            "Indirect restrictions also violate rights",
+            "Economic control impacts freedom"
+        ],
+        "embedding_text": "article 19 press freedom indirect restriction economic control freedom expression"
+    },
+    {
+        "id": "case_007",
+        "case_name": "Olga Tellis v. Bombay Municipal Corporation",
+        "year": 1985,
+        "court": "Supreme Court of India",
+        "articles": [
+            "21"
+        ],
+        "topics": [
+            "livelihood"
+        ],
+        "summary": "Right to livelihood is part of Article 21.",
+        "key_points": [
+            "Livelihood integral to life",
+            "State action affecting livelihood must be fair"
+        ],
+        "embedding_text": "right to livelihood article 21 employment survival dignity life"
+    },
+    {
+        "id": "case_008",
+        "case_name": "Vishaka v. State of Rajasthan",
+        "year": 1997,
+        "court": "Supreme Court of India",
+        "articles": [
+            "14",
+            "19",
+            "21"
+        ],
+        "topics": [
+            "workplace harassment",
+            "gender equality"
+        ],
+        "summary": "Established guidelines against workplace sexual harassment.",
+        "key_points": [
+            "Safe workplace is fundamental right",
+            "Employer responsibility emphasized"
+        ],
+        "embedding_text": "workplace harassment gender equality article 14 19 21 safe workplace employer duty"
+    },
+    {
+        "id": "case_009",
+        "case_name": "Air India v. Nergesh Meerza",
+        "year": 1981,
+        "court": "Supreme Court of India",
+        "articles": [
+            "14"
+        ],
+        "topics": [
+            "gender discrimination"
+        ],
+        "summary": "Discriminatory service conditions violate Article 14.",
+        "key_points": [
+            "Arbitrary employment rules invalid",
+            "Gender-based discrimination prohibited"
+        ],
+        "embedding_text": "employment discrimination gender article 14 arbitrary service conditions invalid"
+    },
+    {
+        "id": "case_010",
+        "case_name": "State of West Bengal v. Anwar Ali Sarkar",
+        "year": 1952,
+        "court": "Supreme Court of India",
+        "articles": [
+            "14"
+        ],
+        "topics": [
+            "equal protection"
+        ],
+        "summary": "Established test for reasonable classification.",
+        "key_points": [
+            "Classification must be reasonable",
+            "No arbitrary grouping"
+        ],
+        "embedding_text": "reasonable classification article 14 equality arbitrary classification invalid"
+    },
+    {
+        "id": "case_011",
+        "case_name": "Minerva Mills v. Union of India",
+        "year": 1980,
+        "court": "Supreme Court of India",
+        "articles": [
+            "14",
+            "19",
+            "21"
+        ],
+        "topics": [
+            "basic structure"
+        ],
+        "summary": "Fundamental rights are part of basic structure.",
+        "key_points": [
+            "Rights cannot be destroyed",
+            "Balance between rights and directive principles"
+        ],
+        "embedding_text": "fundamental rights basic structure article 14 19 21 balance constitution"
+    },
+    {
+        "id": "case_012",
+        "case_name": "I.R. Coelho v. State of Tamil Nadu",
+        "year": 2007,
+        "court": "Supreme Court of India",
+        "articles": [
+            "14",
+            "21"
+        ],
+        "topics": [
+            "judicial review"
+        ],
+        "summary": "Laws violating fundamental rights are subject to judicial review.",
+        "key_points": [
+            "Ninth Schedule laws can be reviewed",
+            "Rights supremacy maintained"
+        ],
+        "embedding_text": "judicial review fundamental rights violation article 14 21 supremacy constitution"
+    },
+    {
+        "id": "case_013",
+        "case_name": "Niranjan Shankar Golikari v. Century Spinning",
+        "year": 1967,
+        "court": "Supreme Court of India",
+        "articles": [],
+        "topics": [
+            "employment contract",
+            "non-compete"
+        ],
+        "summary": "Certain restrictive covenants during employment are valid.",
+        "key_points": [
+            "Reasonable restrictions allowed",
+            "Applies during employment"
+        ],
+        "embedding_text": "employment contract non compete clause reasonable restriction validity"
+    },
+    {
+        "id": "case_014",
+        "case_name": "Superintendence Company v. Krishan Murgai",
+        "year": 1981,
+        "court": "Supreme Court of India",
+        "articles": [],
+        "topics": [
+            "restraint of trade"
+        ],
+        "summary": "Post-employment restrictions are generally void under Section 27.",
+        "key_points": [
+            "Protects employee freedom",
+            "Invalidates broad non-compete clauses"
+        ],
+        "embedding_text": "section 27 restraint trade post employment non compete void employee freedom"
+    },
+    {
+        "id": "case_015",
+        "case_name": "Bijoe Emmanuel v. State of Kerala",
+        "year": 1986,
+        "court": "Supreme Court of India",
+        "articles": [
+            "19",
+            "25"
+        ],
+        "topics": [
+            "freedom of conscience"
+        ],
+        "summary": "Freedom of conscience protected under Articles 19 and 25.",
+        "key_points": [
+            "Cannot compel expression against beliefs",
+            "Protects individual autonomy"
+        ],
+        "embedding_text": "freedom conscience article 19 25 autonomy belief expression compulsion unconstitutional"
+    },
+    {
+        "id": "case_016",
+        "case_name": "Francis Coralie Mullin v. Administrator, Union Territory of Delhi",
+        "year": 1981,
+        "court": "Supreme Court of India",
+        "articles": [
+            "21",
+            "14"
+        ],
+        "topics": [
+            "dignity",
+            "human rights"
+        ],
+        "summary": "The right to life includes the right to live with human dignity and minimum necessities.",
+        "key_points": [
+            "Life includes dignity, not mere survival",
+            "State action must be humane and fair"
+        ],
+        "embedding_text": "right to dignity article 21 human dignity fair treatment article 14 humane conditions"
+    },
+    {
+        "id": "case_017",
+        "case_name": "Justice K.S. Puttaswamy (Aadhaar) v. Union of India",
+        "year": 2018,
+        "court": "Supreme Court of India",
+        "articles": [
+            "14",
+            "19",
+            "21"
+        ],
+        "topics": [
+            "privacy",
+            "proportionality"
+        ],
+        "summary": "Established proportionality test for restrictions on fundamental rights.",
+        "key_points": [
+            "Any restriction must be proportionate",
+            "Balancing state interest and individual rights"
+        ],
+        "embedding_text": "proportionality test article 14 19 21 privacy restriction balance rights state"
+    },
+    {
+        "id": "case_018",
+        "case_name": "Modern Dental College v. State of Madhya Pradesh",
+        "year": 2016,
+        "court": "Supreme Court of India",
+        "articles": [
+            "19",
+            "14"
+        ],
+        "topics": [
+            "reasonable restriction",
+            "proportionality"
+        ],
+        "summary": "Reinforced the proportionality doctrine for restrictions under Article 19.",
+        "key_points": [
+            "Restrictions must not be excessive",
+            "Balancing test required"
+        ],
+        "embedding_text": "proportionality reasonable restriction article 19 article 14 balance excessive restriction"
+    },
+    {
+        "id": "case_019",
+        "case_name": "Navtej Singh Johar v. Union of India",
+        "year": 2018,
+        "court": "Supreme Court of India",
+        "articles": [
+            "14",
+            "15",
+            "19",
+            "21"
+        ],
+        "topics": [
+            "equality",
+            "dignity",
+            "privacy"
+        ],
+        "summary": "Decriminalized homosexuality and reinforced dignity, equality, and privacy rights.",
+        "key_points": [
+            "Sexual orientation protected",
+            "Dignity central to Article 21",
+            "Equality under Article 14"
+        ],
+        "embedding_text": "equality dignity privacy article 14 15 19 21 autonomy discrimination fundamental rights"
+    }
+]
