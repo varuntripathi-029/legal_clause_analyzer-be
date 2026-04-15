@@ -262,6 +262,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # ===========================================================================
 # ROUTES - Health & Status
 # ===========================================================================
+@app.head("/", tags=["health"])
 @app.get("/", tags=["health"])
 async def health_check() -> dict[str, str]:
     """Simple liveness probe."""
