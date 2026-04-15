@@ -14,11 +14,7 @@ class ContractRequest(BaseModel):
     contract_text: str = Field(
         ...,
         min_length=10,
-        description="Raw text of the employment contract to analyze.",
-        examples=[
-            "1. The employee shall not engage in any competing business "
-            "for a period of 5 years after termination of employment."
-        ],
+        description="Raw text of the employment contract to analyze."
     )
 
 
@@ -31,8 +27,7 @@ class PotentialViolation(BaseModel):
     )
     articles: list[str] = Field(
         default_factory=list,
-        description="List of constitutional articles or statutory sections violated.",
-        examples=[["Article 19(1)(g)", "Section 27, Indian Contract Act"]],
+        description="List of constitutional articles or statutory sections violated."
     )
 
 
@@ -57,14 +52,21 @@ class ClauseAnalysis(BaseModel):
     )
     risk_level: str = Field(
         ...,
-        description="Risk classification: High, Medium, Low, or None.",
-        examples=["High", "Medium", "Low", "None"],
+        description="Risk classification: High, Medium, Low, or None."
     )
-    confidence_score: float = Field(
+    confidence_score: int = Field(
         ...,
-        ge=0.0,
-        le=1.0,
-        description="Model confidence in the analysis (0.0 – 1.0).",
+        ge=0,
+        le=100,
+        description="Final hybrid confidence score from 0 to 100.",
+    )
+    llm_certainty: int = Field(
+        ...,
+        description="Confidence of the LLM in its specific reasoning (0-100).",
+    )
+    retrieval_match: int = Field(
+        ...,
+        description="Distance-based retrieval match strength (0-100).",
     )
 
 

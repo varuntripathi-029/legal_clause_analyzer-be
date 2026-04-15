@@ -45,6 +45,9 @@ class SessionStore(Protocol):
     async def close(self) -> None:
         """Release any backend resources."""
 
+    async def clear_all(self) -> None:
+        """Clear all stored sessions across the backend entirely."""
+
 
 class ChatSessionStore:
     """Bounded in-memory store used when Redis is not configured."""
@@ -110,6 +113,10 @@ class ChatSessionStore:
 
     async def close(self) -> None:
         """Clear all in-memory state."""
+        await self.clear_all()
+
+    async def clear_all(self) -> None:
+        """Purge all sessions stored in memory."""
         with self._lock:
             self._items.clear()
 
@@ -217,6 +224,15 @@ class RedisChatSessionStore:
             maybe_result = legacy_close()
             if hasattr(maybe_result, "__await__"):
                 await maybe_result
+
+    async def clear_all(self) -> None:
+        """Drop all chat sessions across the Redis architecture globally."""
+        pipeline = self._redis.pipeline(transaction=False)
+        session_ids = await self._redis.zrange(self._index_key, 0, -1)
+        for sid in session_ids:
+            pipeline.delete(self._session_key(sid))
+        pipeline.delete(self._index_key)
+        await pipeline.execute()
 
 
 def create_chat_session_store(settings: Settings) -> SessionStore:

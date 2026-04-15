@@ -35,7 +35,7 @@ from google.genai import types
 from app.rag_core import (
     LegalRAGPipeline,
     _EMBEDDING_MODEL_NAME,
-    _GEMINI_MODEL_NAME,
+    _GENERATIVE_MODEL_NAME,
 )
 from app.schemas import (
     ClauseAnalysis,
@@ -113,7 +113,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_name,
         settings.environment,
     )
-    pipeline = LegalRAGPipeline(gemini_api_key=settings.gemini_api_key)
+    pipeline = LegalRAGPipeline(api_key=settings.gemini_api_key)
     
     # Start Redis connection
     await chat_sessions.startup()
@@ -284,8 +284,8 @@ async def pipeline_status() -> PipelineStatusResponse:
     return PipelineStatusResponse(
         status="ready",
         embedding_model=_EMBEDDING_MODEL_NAME,
-        llm_model=pipe.model_name or _GEMINI_MODEL_NAME,
-        faiss_index_size=pipe.index.ntotal,
+        llm_model=pipe.model_name or _GENERATIVE_MODEL_NAME,
+        faiss_index_size=pipe.index.ntotal if pipe.index else 0,
         kb_documents_loaded=len(pipe.kb_documents),
     )
 
@@ -423,7 +423,7 @@ async def analyze_contract(file: UploadFile = File(...)) -> ContractAnalysisResp
     )
 
     initial_state: ChatSessionState = {
-        "model_name": pipe.model_name or _GEMINI_MODEL_NAME,
+        "model_name": pipe.model_name or _GENERATIVE_MODEL_NAME,
         "chat_config": {"system_instruction": system_instruction},
         "history": [],
         "created_at": time.time(),
@@ -467,10 +467,10 @@ async def chat_with_contract(request: ChatRequest) -> ChatResponse:
         )
 
         # 3. Process the new user message
-        response = await chat.send_message_async(request.message)
+        response = await chat.send_message(request.message)
 
         # 4. Serialize the updated history back to Redis
-        state["history"] = dump_history(chat.history)
+        state["history"] = dump_history(chat.get_history())
         state["updated_at"] = time.time()
         await chat_sessions.set(request.session_id, state)
 
