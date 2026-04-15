@@ -7,9 +7,8 @@ ENV PIP_NO_CACHE_DIR=1
 WORKDIR /app
 
 COPY requirements.txt .
-# Install the CPU-only version of PyTorch first, then install the rest
+# Install backend dependencies
 RUN pip install --upgrade pip && \
-    pip install torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install -r requirements.txt
 
 COPY app ./app
