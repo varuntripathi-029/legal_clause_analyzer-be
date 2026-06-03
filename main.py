@@ -114,6 +114,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.environment,
     )
     pipeline = LegalRAGPipeline(api_key=settings.gemini_api_key)
+    await pipeline.startup()
     
     # Start Redis connection
     await chat_sessions.startup()

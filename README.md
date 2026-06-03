@@ -5,7 +5,7 @@ This repository contains the backend service for the Legal Contract Analyzer, a 
 ## Core Capabilities
 
 * **Document Parsing & Clause Extraction:** Intelligently processes uploaded PDF contracts, segmenting the raw text into distinct, analyzable legal clauses.
-* **Context-Aware Retrieval (RAG):** Utilizes `BAAI/bge-small-en-v1.5` embeddings alongside a FAISS vector database to retrieve highly relevant legal precedents, including Constitutional Articles, Statutes, and Case Law.
+* **Context-Aware Retrieval (RAG):** Utilizes `gemini-embedding-001` embeddings alongside a FAISS vector database to retrieve highly relevant legal precedents, including Constitutional Articles, Statutes, and Case Law.
 * **Generative AI Evaluation:** Leverages Google's Gemini model to evaluate each clause against the retrieved legal context. The system returns a calibrated risk level, a confidence score, and detailed, step-by-step legal reasoning.
 * **Persistent Document Chat:** Maintains stateful, multi-turn chat sessions using Redis, allowing users to ask follow-up questions and interact directly with the analyzed contract.
 * **Cloud-Native Architecture:** Designed for robust cloud deployment. By externalizing the chat state to Redis, the application supports safe multi-worker scaling.
@@ -14,7 +14,7 @@ This repository contains the backend service for the Legal Contract Analyzer, a 
 ## Technology Stack
 
 * **Application Framework:** FastAPI, Uvicorn
-* **Artificial Intelligence:** Google GenAI SDK (Gemini), Sentence-Transformers
+* **Artificial Intelligence:** Google GenAI SDK (Gemini)
 * **Vector Search:** FAISS (CPU)
 * **State Management:** Redis (with an automatic in-memory fallback for local development)
 * **Document Processing:** PyPDF

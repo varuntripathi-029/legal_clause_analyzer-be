@@ -26,13 +26,15 @@ class LegalRAGPipeline:
         self.kb_documents = []
         self.index = None
         
-        # Load and build the knowledge base upon startup
+        logger.info("RAG Pipeline object created. Call await startup() to initialize.")
+
+    async def startup(self):
+        """Async initialization for the RAG Pipeline."""
         self._load_knowledge_base()
-        self._build_faiss_index()
-        
+        await self._build_faiss_index()
         logger.info("RAG Pipeline initialized successfully.")
 
-    def _generate_embeddings(self, texts: list[str]) -> np.ndarray:
+    async def _generate_embeddings(self, texts: list[str]) -> np.ndarray:
         """Generate vector embeddings using the Gemini API in batches."""
         if not texts:
             return np.empty((0, _EMBEDDING_DIM), dtype=np.float32)
@@ -44,7 +46,7 @@ class LegalRAGPipeline:
             batch = texts[i:i + batch_size]
             
             # Call the Gemini Embedding API
-            response = self.client.models.embed_content(
+            response = await self.client.aio.models.embed_content(
                 model=_EMBEDDING_MODEL_NAME,
                 contents=batch,
                 config=types.EmbedContentConfig(output_dimensionality=_EMBEDDING_DIM)
@@ -72,7 +74,7 @@ class LegalRAGPipeline:
         # Ensure we only retain valid documents to prevent empty string API crashes.
         self.kb_documents = [doc for doc in self.kb_documents if doc.get("text", "").strip()]
 
-    def _build_faiss_index(self):
+    async def _build_faiss_index(self):
         """Embeds the knowledge base and builds the FAISS vector search index."""
         if not self.kb_documents:
             return
@@ -80,7 +82,7 @@ class LegalRAGPipeline:
         texts = [doc.get("text", "") for doc in self.kb_documents]
         
         logger.info(f"Generating embeddings for {len(texts)} KB documents via Gemini API...")
-        embeddings_np = self._generate_embeddings(texts)
+        embeddings_np = await self._generate_embeddings(texts)
         
         # Build the CPU-optimized FAISS index
         self.index = faiss.IndexFlatL2(_EMBEDDING_DIM)
@@ -88,13 +90,13 @@ class LegalRAGPipeline:
         
         logger.info(f"FAISS index built with {self.index.ntotal} vectors.")
 
-    def smart_retrieve(self, query: str, top_k: int = 3) -> tuple[list[dict], float]:
+    async def smart_retrieve(self, query: str, top_k: int = 3) -> tuple[list[dict], float]:
         """Embeds the query and searches the FAISS index for the most relevant context."""
         if self.index is None or self.index.ntotal == 0:
             return [], 2.0
             
         # Generate embedding for the single search query
-        query_vec = self._generate_embeddings([query])
+        query_vec = await self._generate_embeddings([query])
         
         # Search the FAISS index
         distances, indices = self.index.search(query_vec, top_k)
@@ -113,7 +115,7 @@ class LegalRAGPipeline:
     async def analyze_clause(self, clause_text: str) -> dict:
         """Main pipeline entry: Retrieves context and asks Gemini to analyze the clause."""
         # 1. Retrieve specific legal context
-        context_docs, best_l2_distance = self.smart_retrieve(clause_text, top_k=3)
+        context_docs, best_l2_distance = await self.smart_retrieve(clause_text, top_k=3)
         context_text = "\n\n".join([
             f"Source: {doc.get('title', 'Unknown')}\nText: {doc.get('text', '')}"
             for doc in context_docs
