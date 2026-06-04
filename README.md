@@ -1,3 +1,12 @@
+---
+title: Legal RAG Assistant
+emoji: ⚖️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
 # Legal Contract Analyzer (RAG Backend)
 
 This repository contains the backend service for the Legal Contract Analyzer, a Retrieval-Augmented Generation (RAG) API built with FastAPI and Google Gemini. The system is designed to parse Indian employment contracts, isolate individual clauses, and evaluate them for potential violations of the Constitution of India (specifically Fundamental Rights) and the Indian Contract Act, 1872.
