@@ -16,7 +16,7 @@ COPY data ./data
 COPY main.py .
 COPY .env.example ./.env.example
 
-EXPOSE 8000
+EXPOSE 7860
 
 # Chat sessions are backed by Redis, so we can safely run multiple workers!
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
