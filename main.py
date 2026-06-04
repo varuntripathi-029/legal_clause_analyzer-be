@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 from collections import Counter
 from contextlib import asynccontextmanager
@@ -26,7 +27,7 @@ import uuid
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pypdf import PdfReader
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -361,11 +362,10 @@ async def preview_clauses(file: UploadFile = File(...)) -> ClausePreviewResponse
 # ===========================================================================
 @app.post(
     "/api/analyze",
-    response_model=ContractAnalysisResponse,
     tags=["analysis"],
-    summary="Analyze a full contract PDF for legal violations",
+    summary="Analyze a full contract PDF for legal violations and stream results",
 )
-async def analyze_contract(file: UploadFile = File(...)) -> ContractAnalysisResponse:
+async def analyze_contract(file: UploadFile = File(...)) -> StreamingResponse:
     """Extract text from a PDF, split it into clauses, and analyse each one."""
     pipe = _require_pipeline()
     _validate_pdf_upload(file)
@@ -382,40 +382,10 @@ async def analyze_contract(file: UploadFile = File(...)) -> ContractAnalysisResp
         )
     _validate_clause_count(clauses)
 
-    logger.info("Analysing %d clause(s) from PDF concurrently", len(clauses))
-    semaphore = asyncio.Semaphore(settings.analysis_concurrency)
-
-    async def process_clause(clause_text: str) -> ClauseResponse | None:
-        async with semaphore:
-            try:
-                analysis = await pipe.analyze_clause(clause_text)
-                return ClauseResponse(clause=clause_text, analysis=analysis)
-            except Exception:
-                logger.exception(
-                    "Failed to analyse clause: %.60s",
-                    clause_text,
-                )
-                return None
-
-    tasks = [process_clause(clause) for clause in clauses]
-    completed_results = await asyncio.gather(*tasks)
-    results = [res for res in completed_results if res is not None]
-
-    if not results:
-        raise HTTPException(
-            status_code=500,
-            detail="Analysis failed for all clauses. Please check server logs.",
-        )
-
-    if len(results) < len(clauses):
-        logger.warning(
-            "Partial clause analysis completed: %d/%d succeeded",
-            len(results),
-            len(clauses),
-        )
-
+    logger.info("Analysing %d clause(s) from PDF concurrently via SSE", len(clauses))
+    
     # ---------------------------------------------------------
-    # NEW PDF FLOW: Build a fresh session state for Redis
+    # NEW PDF FLOW: Build a fresh session state for Redis first
     # ---------------------------------------------------------
     session_id = str(uuid.uuid4())
     system_instruction = (
@@ -433,8 +403,39 @@ async def analyze_contract(file: UploadFile = File(...)) -> ContractAnalysisResp
     }
 
     await chat_sessions.set(session_id, initial_state)
-    
-    return ContractAnalysisResponse(session_id=session_id, results=results)
+
+    semaphore = asyncio.Semaphore(settings.analysis_concurrency)
+
+    async def process_clause(clause_text: str) -> ClauseResponse | None:
+        async with semaphore:
+            try:
+                analysis = await pipe.analyze_clause(clause_text)
+                return ClauseResponse(clause=clause_text, analysis=analysis)
+            except Exception:
+                logger.exception(
+                    "Failed to analyse clause: %.60s",
+                    clause_text,
+                )
+                return None
+
+    async def sse_generator() -> AsyncGenerator[str, None]:
+        # Yield initialization event
+        init_data = {"type": "init", "session_id": session_id, "total_clauses": len(clauses)}
+        yield f"data: {json.dumps(init_data)}\n\n"
+
+        tasks = [asyncio.create_task(process_clause(clause)) for clause in clauses]
+        
+        # Yield results as they complete
+        for future in asyncio.as_completed(tasks):
+            result = await future
+            if result is not None:
+                clause_data = {"type": "clause", "clause": result.clause, "analysis": result.analysis.model_dump()}
+                yield f"data: {json.dumps(clause_data)}\n\n"
+        
+        # Yield completion event
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
 
 
 @app.post(
