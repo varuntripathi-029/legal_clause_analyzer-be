@@ -34,7 +34,7 @@ class Settings(BaseSettings):
             "http://localhost:5173",
         ]
     )
-    trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1"])
+    trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "*.hf.space"])
     allow_credentials: bool = True
     gzip_minimum_size: int = 1000
     analysis_concurrency: int = 5
