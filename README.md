@@ -79,17 +79,7 @@ This way, if the model is confident but the retrieval was weak, the final score 
 
 ---
 
-### 7. Chat Sessions Kept Disappearing
-
-**The problem:** After analyzing a contract, users want to ask follow-up questions ("what does clause 5 mean?", "is this enforceable?"). I initially stored the conversation state in Python memory, but it disappeared whenever the server restarted or if I ran multiple workers.
-
-**What I did:** Moved session state to Redis. Each analysis creates a `session_id`, and the full Gemini chat history (serialized as JSON) gets stored with a 1-hour TTL. To prevent Redis from filling up, I track sessions in a Sorted Set (ZSET) ordered by timestamp and auto-evict the oldest ones when it hits 250 sessions.
-
-For local development without Redis, there's an automatic in-memory fallback with the same interface — so the app works with or without Redis configured.
-
----
-
-### 8. Getting the LLM to Return Consistent JSON
+### 7. Getting the LLM to Return Consistent JSON
 
 **The problem:** Gemini would sometimes return markdown, sometimes JSON with extra fields, sometimes JSON with missing fields. The frontend needs a predictable schema every time.
 
