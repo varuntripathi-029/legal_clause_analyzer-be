@@ -87,7 +87,7 @@ This way, if the model is confident but the retrieval was weak, the final score 
 
 ---
 
-### 9. Deploying on Free Infrastructure Was Its Own Battle
+### 8. Deploying on Free Infrastructure Was Its Own Battle
 
 **The problem:** Hugging Face Spaces gives you a free Docker container, but RAM is limited, startup times matter, and some Python packages are huge. I also hit issues with:
 - `Invalid Host header` errors (the HF proxy uses a different hostname than `localhost`)
@@ -101,7 +101,7 @@ This way, if the model is confident but the retrieval was weak, the final score 
 
 ---
 
-### 10. Balancing Cost, Speed, and Accuracy
+### 9. Balancing Cost, Speed, and Accuracy
 
 **The problem:** Gemini embeddings and reasoning give great quality but every API call costs time and adds external dependency. For a portfolio project, I needed it to be fast enough to demo live without awkward pauses.
 
