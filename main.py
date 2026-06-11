@@ -451,10 +451,7 @@ async def chat_with_contract(request: ChatRequest) -> ChatResponse:
     # 1. Fetch JSON state from Redis
     state = await chat_sessions.get(request.session_id)
     if state is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Session not found. It may have expired or not exist.",
-        )
+        return ChatResponse(response="Start a new chat to continue the query")
 
     try:
         # 2. Reconstruct the Gemini Chat Session from the saved JSON
