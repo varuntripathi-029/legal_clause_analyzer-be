@@ -1,22 +1,58 @@
+# ==============================================================================
+# Production Dockerfile for Legal Contract Analyzer RAG Backend
+# ==============================================================================
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV PIP_NO_CACHE_DIR=1
+# Set environment variables for Python, caching, and application defaults
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    FASTEMBED_CACHE_PATH=/app/.cache/fastembed \
+    PADDLE_HOME=/app/.cache/paddle \
+    PORT=8000
 
 WORKDIR /app
 
+# Install critical system libraries required by OpenCV/PaddleOCR, FAISS, ONNX runtime, and healthchecks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    libgomp1 \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root system user and cache directories for security & permissions
+RUN useradd -u 10001 -m -s /bin/bash appuser && \
+    mkdir -p /app/.cache/fastembed /app/.cache/paddle /app/logs && \
+    chown -R appuser:appuser /app
+
+# Copy requirements and install dependencies
 COPY requirements.txt .
-# Install backend dependencies
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
-COPY data ./data
-COPY main.py .
-COPY .env.example ./.env.example
+# Pre-download fastembed embedding model at build time for instant offline-ready startup
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-base-en-v1.5')"
 
-EXPOSE 7860
+# Copy application source code and data files
+COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser data ./data
+COPY --chown=appuser:appuser ingestion ./ingestion
+COPY --chown=appuser:appuser main.py .
+COPY --chown=appuser:appuser .env.example ./.env.example
 
-# Chat sessions are backed by Redis, so we can safely run multiple workers!
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
+# Ensure proper ownership of pre-downloaded model cache and all app files
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user for enhanced container security
+USER appuser
+
+EXPOSE 8000
+
+# Healthcheck probe using the application's liveness endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/ || exit 1
+
+# Start the application server with proxy header support for production load balancers
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

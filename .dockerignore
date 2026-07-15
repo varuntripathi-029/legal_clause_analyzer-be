@@ -1,0 +1,43 @@
+# Git & IDEs
+.git
+.gitignore
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Virtual environments & local builds
+.venv
+venv
+ENV
+env
+build
+dist
+*.egg-info
+__pycache__
+**/__pycache__
+*.py[cod]
+*$py.class
+
+# Environment & Secrets (Never copy local API keys into build context)
+.env
+.env.*
+!.env.example
+
+# Testing & Caches
+tests
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+scratch
+tmp
+temp
+logs
+*.log
+
+# Local uploads & model caches
+uploads
+.cache
