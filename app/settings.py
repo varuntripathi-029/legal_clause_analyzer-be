@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     reload: bool = False
     log_level: str = "INFO"
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     cors_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
@@ -91,7 +92,7 @@ class Settings(BaseSettings):
         """Provide a permissive fallback for local development."""
         return value or ["*"]
 
-    @field_validator("gemini_api_key", "redis_url", "redis_key_prefix")
+    @field_validator("gemini_api_key", "groq_api_key", "redis_url", "redis_key_prefix")
     @classmethod
     def _strip_string_settings(cls, value: str) -> str:
         """Normalize whitespace around string settings."""
@@ -106,8 +107,8 @@ class Settings(BaseSettings):
     def validate_for_runtime(self) -> None:
         """Apply environment-specific safety checks."""
         if self.environment == "production":
-            if not self.gemini_api_key or self.gemini_api_key == "your_api_key_here":
-                raise ValueError("GEMINI_API_KEY must be configured in production.")
+            if not self.groq_api_key or self.groq_api_key == "your_groq_api_key_here":
+                raise ValueError("GROQ_API_KEY must be configured in production.")
             if "*" in self.cors_origins:
                 raise ValueError("Wildcard CORS is not allowed in production.")
             if "*" in self.trusted_hosts:

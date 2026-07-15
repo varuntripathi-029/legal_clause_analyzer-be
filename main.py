@@ -34,7 +34,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pypdf import PdfReader
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from google.genai import types
+
 
 from app.rag_core import (
     LegalRAGPipeline,
@@ -80,30 +80,16 @@ def _request_id_from(request: Request) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Serialization Helpers for Redis
+# Serialization Helpers for Redis (plain dict format for Groq messages API)
 # ---------------------------------------------------------------------------
-def dump_history(history: list[types.Content] | None) -> list[dict[str, Any]]:
-    """Converts Gemini Content objects into JSON-safe dictionaries."""
-    if not history:
-        return []
-    return [
-        {
-            "role": h.role,
-            "parts": [{"text": p.text} for p in h.parts if p.text]
-        }
-        for h in history
-    ]
+def dump_history(history: list[dict[str, str]] | None) -> list[dict[str, str]]:
+    """Pass-through: history is already a list of {role, content} dicts."""
+    return list(history) if history else []
 
 
-def load_history(raw_history: list[dict[str, Any]]) -> list[types.Content]:
-    """Converts JSON dictionaries back into Gemini Content objects."""
-    return [
-        types.Content(
-            role=msg["role"],
-            parts=[types.Part.from_text(text=part["text"]) for part in msg.get("parts", [])]
-        )
-        for msg in raw_history
-    ]
+def load_history(raw_history: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Pass-through: history is already a list of {role, content} dicts."""
+    return list(raw_history) if raw_history else []
 
 
 @asynccontextmanager
@@ -111,16 +97,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Initialise the RAG pipeline and Redis connection once on startup."""
     global pipeline
 
-    if not settings.gemini_api_key or settings.gemini_api_key == "your_api_key_here":
-        logger.error("GEMINI_API_KEY is not set.")
-        raise RuntimeError("Missing GEMINI_API_KEY.")
+    if not settings.groq_api_key or settings.groq_api_key == "your_groq_api_key_here":
+        logger.error("GROQ_API_KEY is not set.")
+        raise RuntimeError("Missing GROQ_API_KEY.")
 
     logger.info(
         "Initialising %s in %s mode",
         settings.app_name,
         settings.environment,
     )
-    pipeline = LegalRAGPipeline(api_key=settings.gemini_api_key)
+    pipeline = LegalRAGPipeline(groq_api_key=settings.groq_api_key)
     await pipeline.startup()
     
     # Start Redis connection
@@ -366,7 +352,8 @@ async def preview_clauses(file: UploadFile = File(...)) -> ClausePreviewResponse
     if not contract_text:
         raise HTTPException(status_code=400, detail="No readable text found in PDF.")
 
-    clauses = pipe.split_clauses(contract_text)
+    cleaned_text = pipe.preprocess_contract_text(contract_text)
+    clauses = pipe.split_clauses(cleaned_text)
     if not clauses:
         raise HTTPException(
             status_code=400,
@@ -393,7 +380,8 @@ async def analyze_contract(file: UploadFile = File(...)) -> StreamingResponse:
     if not contract_text:
         raise HTTPException(status_code=400, detail="No readable text found in PDF.")
 
-    clauses = pipe.split_clauses(contract_text)
+    cleaned_text = pipe.preprocess_contract_text(contract_text)
+    clauses = pipe.split_clauses(cleaned_text)
     if not clauses:
         raise HTTPException(
             status_code=400,
@@ -401,7 +389,7 @@ async def analyze_contract(file: UploadFile = File(...)) -> StreamingResponse:
         )
     _validate_clause_count(clauses)
 
-    logger.info("Analysing %d clause(s) from PDF concurrently via SSE", len(clauses))
+    logger.info("Analysing %d clause(s) from PDF sequentially via SSE with context", len(clauses))
     
     # ---------------------------------------------------------
     # NEW PDF FLOW: Build a fresh session state for Redis first
@@ -410,47 +398,66 @@ async def analyze_contract(file: UploadFile = File(...)) -> StreamingResponse:
     system_instruction = (
         "You are an expert Indian legal assistant. The user has uploaded an "
         "employment contract. Answer any questions about the contract. "
-        f"Here is the contract text:\n\n{contract_text}"
+        "Use the retrieved legal context provided with each question to "
+        "ground your answers in specific laws and provisions."
     )
 
     initial_state: ChatSessionState = {
         "model_name": pipe.model_name or _GENERATIVE_MODEL_NAME,
         "chat_config": {"system_instruction": system_instruction},
         "history": [],
+        "contract_text": contract_text,
         "created_at": time.time(),
         "updated_at": time.time()
     }
 
     await chat_sessions.set(session_id, initial_state)
 
-    semaphore = asyncio.Semaphore(settings.analysis_concurrency)
-
-    async def process_clause(clause_text: str) -> ClauseResponse | None:
-        async with semaphore:
-            try:
-                analysis = await pipe.analyze_clause(clause_text)
-                return ClauseResponse(clause=clause_text, analysis=analysis)
-            except Exception:
-                logger.exception(
-                    "Failed to analyse clause: %.60s",
-                    clause_text,
-                )
-                return None
-
     async def sse_generator() -> AsyncGenerator[str, None]:
         # Yield initialization event
         init_data = {"type": "init", "session_id": session_id, "total_clauses": len(clauses)}
         yield f"data: {json.dumps(init_data)}\n\n"
 
-        tasks = [asyncio.create_task(process_clause(clause)) for clause in clauses]
-        
-        # Yield results as they complete
-        for future in asyncio.as_completed(tasks):
-            result = await future
-            if result is not None:
-                clause_data = {"type": "clause", "clause": result.clause, "analysis": result.analysis.model_dump()}
+        # 1. Generate contract summary first
+        contract_summary = await pipe.generate_contract_summary(contract_text)
+        yield f"data: {json.dumps({'type': 'summary', 'text': contract_summary})}\n\n"
+
+        previous_analyses: list[dict] = []
+
+        # 2. Process clauses sequentially with context
+        for i, clause in enumerate(clauses):
+            try:
+                analysis_dict = await pipe.analyze_clause(
+                    clause_text=clause,
+                    clause_index=i,
+                    total_clauses=len(clauses),
+                    contract_summary=contract_summary,
+                    previous_analyses=previous_analyses,
+                    all_clauses=clauses,
+                )
+                previous_analyses.append(analysis_dict)
+
+                clause_data = {
+                    "type": "clause",
+                    "index": i,
+                    "clause": clause,
+                    "analysis": analysis_dict,
+                }
                 yield f"data: {json.dumps(clause_data)}\n\n"
-        
+            except Exception:
+                logger.exception("Failed to analyse clause %d: %.60s", i, clause)
+
+        # 3. Generate executive summary across all analyzed clauses
+        try:
+            exec_summary_dict = await pipe.generate_executive_summary(
+                contract_summary=contract_summary,
+                clause_analyses=previous_analyses,
+                all_clauses=clauses,
+            )
+            yield f"data: {json.dumps({'type': 'executive_summary', 'summary': exec_summary_dict})}\n\n"
+        except Exception:
+            logger.exception("Failed to generate executive summary")
+
         # Yield completion event
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
@@ -459,47 +466,51 @@ async def analyze_contract(file: UploadFile = File(...)) -> StreamingResponse:
 
 @app.post(
     "/api/chat",
-    response_model=ChatResponse,
     tags=["analysis"],
-    summary="Chat with an analyzed contract",
+    summary="Chat with an analyzed contract (SSE streaming)",
 )
-async def chat_with_contract(request: ChatRequest) -> ChatResponse:
-    """Send a question within an active document chat session."""
+async def chat_with_contract(request: ChatRequest) -> StreamingResponse:
+    """Stream a chat response within an active document chat session via SSE."""
     pipe = _require_pipeline()
-    
+
     # 1. Fetch JSON state from Redis
     state = await chat_sessions.get(request.session_id)
     if state is None:
-        return ChatResponse(response="Start a new chat to continue the query")
+        async def error_stream() -> AsyncGenerator[str, None]:
+            yield f"data: {json.dumps({'type': 'error', 'text': 'Session expired. Please start a new analysis.'})}\n\n"
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
 
-    try:
-        # 2. Reconstruct the Gemini Chat Session from the saved JSON
-        history = load_history(state["history"])
-        config = types.GenerateContentConfig(
-            system_instruction=state["chat_config"]["system_instruction"],
-            temperature=0.3,
-        )
-        chat = pipe.client.aio.chats.create(
-            model=state["model_name"],
-            config=config,
-            history=history
-        )
+    history = load_history(state["history"])
+    system_instruction = state["chat_config"]["system_instruction"]
 
-        # 3. Process the new user message
-        response = await chat.send_message(request.message)
+    async def sse_chat_generator() -> AsyncGenerator[str, None]:
+        full_response = ""
+        try:
+            # Stream tokens from Groq LPU via RAG-augmented context
+            async for token in pipe.stream_chat(
+                query=request.message,
+                history=history,
+                system_instruction=system_instruction,
+            ):
+                full_response += token
+                yield f"data: {json.dumps({'type': 'chunk', 'text': token})}\n\n"
 
-        # 4. Serialize the updated history back to Redis
-        state["history"] = dump_history(chat.get_history())
-        state["updated_at"] = time.time()
-        await chat_sessions.set(request.session_id, state)
+            # Send completion event
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-        return ChatResponse(response=response.text)
-    except Exception as exc:
-        logger.error("Failed to process chat message: %s", exc)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to process the chat message.",
-        ) from exc
+            # Persist updated history back to Redis
+            state["history"] = dump_history(history + [
+                {"role": "user", "content": request.message},
+                {"role": "assistant", "content": full_response},
+            ])
+            state["updated_at"] = time.time()
+            await chat_sessions.set(request.session_id, state)
+
+        except Exception as exc:
+            logger.error("Failed to stream chat message: %s", exc)
+            yield f"data: {json.dumps({'type': 'error', 'text': 'Failed to process the chat message.'})}\n\n"
+
+    return StreamingResponse(sse_chat_generator(), media_type="text/event-stream")
 
 
 @app.post(
@@ -513,7 +524,15 @@ async def analyze_single_clause(request: SingleClauseRequest) -> ClauseResponse:
     pipe = _require_pipeline()
 
     try:
-        analysis: ClauseAnalysis = await pipe.analyze_clause(request.clause_text)
+        analysis_dict = await pipe.analyze_clause(
+            clause_text=request.clause_text,
+            clause_index=0,
+            total_clauses=1,
+            contract_summary=request.clause_text,
+            previous_analyses=[],
+            all_clauses=[request.clause_text],
+        )
+        analysis = ClauseAnalysis.model_validate(analysis_dict)
         return ClauseResponse(clause=request.clause_text, analysis=analysis)
     except Exception as exc:
         logger.error("Failed to analyse clause: %s", exc)
@@ -621,7 +640,8 @@ async def analyze_from_text(request: AnalyzeFromTextRequest) -> StreamingRespons
     pipe = _require_pipeline()
     contract_text = request.contract_text
 
-    clauses = pipe.split_clauses(contract_text)
+    cleaned_text = pipe.preprocess_contract_text(contract_text)
+    clauses = pipe.split_clauses(cleaned_text)
     if not clauses:
         raise HTTPException(
             status_code=400,
@@ -629,35 +649,26 @@ async def analyze_from_text(request: AnalyzeFromTextRequest) -> StreamingRespons
         )
     _validate_clause_count(clauses)
 
-    logger.info("Analysing %d clause(s) from confirmed text via SSE", len(clauses))
+    logger.info("Analysing %d clause(s) from confirmed text sequentially via SSE with context", len(clauses))
 
     # Build a chat session for follow-up questions
     session_id = str(uuid.uuid4())
     system_instruction = (
         "You are an expert Indian legal assistant. The user has uploaded an "
         "employment contract. Answer any questions about the contract. "
-        f"Here is the contract text:\n\n{contract_text}"
+        "Use the retrieved legal context provided with each question to "
+        "ground your answers in specific laws and provisions."
     )
 
     initial_state: ChatSessionState = {
         "model_name": pipe.model_name or _GENERATIVE_MODEL_NAME,
         "chat_config": {"system_instruction": system_instruction},
         "history": [],
+        "contract_text": contract_text,
         "created_at": time.time(),
         "updated_at": time.time(),
     }
     await chat_sessions.set(session_id, initial_state)
-
-    semaphore = asyncio.Semaphore(settings.analysis_concurrency)
-
-    async def process_clause(clause_text: str) -> ClauseResponse | None:
-        async with semaphore:
-            try:
-                analysis = await pipe.analyze_clause(clause_text)
-                return ClauseResponse(clause=clause_text, analysis=analysis)
-            except Exception:
-                logger.exception("Failed to analyse clause: %.60s", clause_text)
-                return None
 
     async def sse_generator() -> AsyncGenerator[str, None]:
         init_data = {
@@ -667,16 +678,42 @@ async def analyze_from_text(request: AnalyzeFromTextRequest) -> StreamingRespons
         }
         yield f"data: {json.dumps(init_data)}\n\n"
 
-        tasks = [asyncio.create_task(process_clause(c)) for c in clauses]
-        for future in asyncio.as_completed(tasks):
-            result = await future
-            if result is not None:
+        contract_summary = await pipe.generate_contract_summary(contract_text)
+        yield f"data: {json.dumps({'type': 'summary', 'text': contract_summary})}\n\n"
+
+        previous_analyses: list[dict] = []
+
+        for i, clause in enumerate(clauses):
+            try:
+                analysis_dict = await pipe.analyze_clause(
+                    clause_text=clause,
+                    clause_index=i,
+                    total_clauses=len(clauses),
+                    contract_summary=contract_summary,
+                    previous_analyses=previous_analyses,
+                    all_clauses=clauses,
+                )
+                previous_analyses.append(analysis_dict)
+
                 clause_data = {
                     "type": "clause",
-                    "clause": result.clause,
-                    "analysis": result.analysis.model_dump(),
+                    "index": i,
+                    "clause": clause,
+                    "analysis": analysis_dict,
                 }
                 yield f"data: {json.dumps(clause_data)}\n\n"
+            except Exception:
+                logger.exception("Failed to analyse clause %d: %.60s", i, clause)
+
+        try:
+            exec_summary_dict = await pipe.generate_executive_summary(
+                contract_summary=contract_summary,
+                clause_analyses=previous_analyses,
+                all_clauses=clauses,
+            )
+            yield f"data: {json.dumps({'type': 'executive_summary', 'summary': exec_summary_dict})}\n\n"
+        except Exception:
+            logger.exception("Failed to generate executive summary")
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
@@ -695,7 +732,8 @@ async def preview_clauses_from_text(
     """Split user-confirmed text into clauses without running analysis."""
     pipe = _require_pipeline()
 
-    clauses = pipe.split_clauses(request.contract_text)
+    cleaned_text = pipe.preprocess_contract_text(request.contract_text)
+    clauses = pipe.split_clauses(cleaned_text)
     if not clauses:
         raise HTTPException(
             status_code=400,
