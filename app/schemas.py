@@ -158,6 +158,46 @@ class KBStatsResponse(BaseModel):
     )
 
 
+class DocumentUploadResponse(BaseModel):
+    """Response after document upload and text extraction."""
+
+    extraction_id: str = Field(
+        ...,
+        description="UUID to reference this extraction in follow-up requests.",
+    )
+    extracted_text: str = Field(
+        ...,
+        description="Text extracted from the uploaded document (may need user review).",
+    )
+    document_type: str = Field(
+        ...,
+        description="Classification: plain_text | searchable_pdf | scanned_pdf | image.",
+    )
+    page_count: int = Field(
+        ...,
+        ge=1,
+        description="Number of pages in the document.",
+    )
+    ocr_confidence: int | None = Field(
+        default=None,
+        description="Average OCR confidence (0-100). None if no OCR was performed.",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="User-facing warnings (e.g. low OCR confidence).",
+    )
+
+
+class AnalyzeFromTextRequest(BaseModel):
+    """Request to run legal analysis on user-confirmed / edited text."""
+
+    contract_text: str = Field(
+        ...,
+        min_length=10,
+        description="Confirmed contract text to analyze (may have been edited after OCR).",
+    )
+
+
 class PipelineStatusResponse(BaseModel):
     """Detailed status of the RAG pipeline."""
 

@@ -8,3 +8,9 @@ python-multipart>=0.0.9
 pypdf>=4.1.0
 redis>=5.0.0
 numpy>=1.26.0
+# --- OCR / Document Ingestion ---
+pdfplumber>=0.10.0
+PyMuPDF>=1.24.0
+Pillow>=10.0.0
+paddleocr>=2.7.0
+paddlepaddle>=2.6.0

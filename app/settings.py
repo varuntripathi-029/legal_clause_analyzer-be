@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     analysis_concurrency: int = 5
     max_pdf_size_bytes: int = 10 * 1024 * 1024
     max_clauses_per_document: int = 100
+    max_image_size_bytes: int = 10 * 1024 * 1024  # 10 MB
+    ocr_confidence_warning_threshold: float = 0.85
+    supported_extensions: list[str] = Field(
+        default_factory=lambda: [".pdf", ".jpg", ".jpeg", ".png", ".txt"]
+    )
     session_ttl_seconds: int = 60 * 60
     max_chat_sessions: int = 250
     redis_url: str = ""

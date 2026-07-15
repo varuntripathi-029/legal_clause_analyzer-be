@@ -2,13 +2,16 @@
 Legal Contract Analyzer - FastAPI application.
 
 Exposes a REST API for:
-  - POST /api/analyze         - Full contract analysis (split + RAG per clause)
-  - POST /api/analyze/clause  - Analyze a single clause
-  - POST /api/preview         - Preview clause splitting without analysis
-  - GET  /api/kb              - List all knowledge-base documents
-  - GET  /api/kb/stats        - Knowledge-base statistics
-  - GET  /api/status          - Pipeline readiness and model info
-  - GET  /                    - Health-check / liveness probe
+  - POST /api/analyze           - Full contract analysis from PDF (split + RAG per clause)
+  - POST /api/analyze/clause    - Analyze a single clause
+  - POST /api/analyze/text      - Analyze confirmed/edited text (OCR workflow)
+  - POST /api/upload            - Upload document + extract text (OCR if needed)
+  - POST /api/preview           - Preview clause splitting from PDF
+  - POST /api/preview/text      - Preview clause splitting from confirmed text
+  - GET  /api/kb                - List all knowledge-base documents
+  - GET  /api/kb/stats          - Knowledge-base statistics
+  - GET  /api/status            - Pipeline readiness and model info
+  - GET  /                      - Health-check / liveness probe
 """
 
 from __future__ import annotations
@@ -39,17 +42,20 @@ from app.rag_core import (
     _GENERATIVE_MODEL_NAME,
 )
 from app.schemas import (
+    AnalyzeFromTextRequest,
     ClauseAnalysis,
     ClausePreviewResponse,
     ClauseResponse,
     ChatRequest,
     ChatResponse,
     ContractAnalysisResponse,
+    DocumentUploadResponse,
     KBDocumentResponse,
     KBStatsResponse,
     PipelineStatusResponse,
     SingleClauseRequest,
 )
+from ingestion import extract_text_from_upload, DocumentType, SUPPORTED_EXTENSIONS
 from app.session_store import create_chat_session_store, ChatSessionState, SessionStore
 from app.settings import get_settings
 
@@ -201,6 +207,19 @@ def _validate_pdf_upload(file: UploadFile) -> None:
     suffix = Path(file.filename or "").suffix.lower()
     if suffix != ".pdf":
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+
+def _validate_upload(file: UploadFile) -> None:
+    """Ensure the uploaded file has a supported extension."""
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported file type '{suffix}'. "
+                f"Supported formats: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
+            ),
+        )
 
 
 def _validate_clause_count(clauses: list[str]) -> None:
@@ -502,6 +521,188 @@ async def analyze_single_clause(request: SingleClauseRequest) -> ClauseResponse:
             status_code=500,
             detail="Analysis failed for the clause.",
         ) from exc
+
+
+# ===========================================================================
+# ROUTES - OCR Upload & Text-Based Analysis (new two-step workflow)
+# ===========================================================================
+@app.post(
+    "/api/upload",
+    response_model=DocumentUploadResponse,
+    tags=["ingestion"],
+    summary="Upload a document and extract text (OCR if needed)",
+)
+async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResponse:
+    """Accept a PDF, image, or text file.  Extract text (with OCR for
+    scanned documents / images) and return it for user review before
+    analysis."""
+    _validate_upload(file)
+
+    try:
+        content = await file.read()
+    finally:
+        await file.close()
+
+    # Size guard
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix == ".pdf" and len(content) > settings.max_pdf_size_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "PDF file is too large. "
+                f"Maximum supported size: {settings.max_pdf_size_bytes} bytes."
+            ),
+        )
+    if suffix in {".jpg", ".jpeg", ".png"} and len(content) > settings.max_image_size_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "Image file is too large. "
+                f"Maximum supported size: {settings.max_image_size_bytes} bytes."
+            ),
+        )
+
+    try:
+        result = extract_text_from_upload(
+            file_bytes=content,
+            filename=file.filename or "upload",
+            ocr_confidence_threshold=settings.ocr_confidence_warning_threshold,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Document extraction failed for %s", file.filename)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process the uploaded document.",
+        ) from exc
+
+    if not result.extracted_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No readable text could be extracted from the uploaded document.",
+        )
+
+    # Convert OCR confidence from 0.0-1.0 float to 0-100 int for the API
+    ocr_conf_int: int | None = None
+    if result.ocr_confidence is not None:
+        ocr_conf_int = int(result.ocr_confidence * 100)
+
+    extraction_id = str(uuid.uuid4())
+    logger.info(
+        "Document uploaded: type=%s pages=%d ocr_confidence=%s extraction_id=%s",
+        result.document_type.value,
+        result.page_count,
+        ocr_conf_int,
+        extraction_id,
+    )
+
+    return DocumentUploadResponse(
+        extraction_id=extraction_id,
+        extracted_text=result.extracted_text,
+        document_type=result.document_type.value,
+        page_count=result.page_count,
+        ocr_confidence=ocr_conf_int,
+        warnings=result.warnings,
+    )
+
+
+@app.post(
+    "/api/analyze/text",
+    tags=["analysis"],
+    summary="Analyze confirmed/edited contract text and stream results",
+)
+async def analyze_from_text(request: AnalyzeFromTextRequest) -> StreamingResponse:
+    """Run the full RAG analysis pipeline on user-confirmed text.
+
+    This is the second step of the OCR workflow: the user has reviewed
+    (and optionally edited) the extracted text and confirmed it.
+    """
+    pipe = _require_pipeline()
+    contract_text = request.contract_text
+
+    clauses = pipe.split_clauses(contract_text)
+    if not clauses:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract any clauses from the provided text.",
+        )
+    _validate_clause_count(clauses)
+
+    logger.info("Analysing %d clause(s) from confirmed text via SSE", len(clauses))
+
+    # Build a chat session for follow-up questions
+    session_id = str(uuid.uuid4())
+    system_instruction = (
+        "You are an expert Indian legal assistant. The user has uploaded an "
+        "employment contract. Answer any questions about the contract. "
+        f"Here is the contract text:\n\n{contract_text}"
+    )
+
+    initial_state: ChatSessionState = {
+        "model_name": pipe.model_name or _GENERATIVE_MODEL_NAME,
+        "chat_config": {"system_instruction": system_instruction},
+        "history": [],
+        "created_at": time.time(),
+        "updated_at": time.time(),
+    }
+    await chat_sessions.set(session_id, initial_state)
+
+    semaphore = asyncio.Semaphore(settings.analysis_concurrency)
+
+    async def process_clause(clause_text: str) -> ClauseResponse | None:
+        async with semaphore:
+            try:
+                analysis = await pipe.analyze_clause(clause_text)
+                return ClauseResponse(clause=clause_text, analysis=analysis)
+            except Exception:
+                logger.exception("Failed to analyse clause: %.60s", clause_text)
+                return None
+
+    async def sse_generator() -> AsyncGenerator[str, None]:
+        init_data = {
+            "type": "init",
+            "session_id": session_id,
+            "total_clauses": len(clauses),
+        }
+        yield f"data: {json.dumps(init_data)}\n\n"
+
+        tasks = [asyncio.create_task(process_clause(c)) for c in clauses]
+        for future in asyncio.as_completed(tasks):
+            result = await future
+            if result is not None:
+                clause_data = {
+                    "type": "clause",
+                    "clause": result.clause,
+                    "analysis": result.analysis.model_dump(),
+                }
+                yield f"data: {json.dumps(clause_data)}\n\n"
+
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
+
+@app.post(
+    "/api/preview/text",
+    response_model=ClausePreviewResponse,
+    tags=["analysis"],
+    summary="Preview clause splitting from confirmed text",
+)
+async def preview_clauses_from_text(
+    request: AnalyzeFromTextRequest,
+) -> ClausePreviewResponse:
+    """Split user-confirmed text into clauses without running analysis."""
+    pipe = _require_pipeline()
+
+    clauses = pipe.split_clauses(request.contract_text)
+    if not clauses:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract any clauses from the provided text.",
+        )
+    _validate_clause_count(clauses)
+    return ClausePreviewResponse(total_clauses=len(clauses), clauses=clauses)
 
 
 if __name__ == "__main__":
