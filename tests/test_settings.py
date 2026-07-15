@@ -30,6 +30,7 @@ class SettingsTests(unittest.TestCase):
             environment="production",
             debug=False,
             gemini_api_key="test-key",
+            groq_api_key="test-groq-key",
             cors_origins=["*"],
             trusted_hosts=["api.example.com"],
         )
