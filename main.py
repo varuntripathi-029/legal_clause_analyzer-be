@@ -135,8 +135,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=settings.allow_credentials and "*" not in settings.cors_origins,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_origin_regex=r"https://.*\.hf\.space|http://(localhost|127\.0\.0\.1)(:[0-9]+)?",
+    allow_credentials=True,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=settings.gzip_minimum_size)
