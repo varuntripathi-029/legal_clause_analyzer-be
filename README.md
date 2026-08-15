@@ -18,7 +18,7 @@ A RAG-powered FastAPI service that analyzes Indian employment contracts (PDFs, i
 ## Technical Stack
 
 * **FastAPI**: Asynchronous web framework exposing REST endpoints and Server-Sent Events (SSE) streaming.
-* **Groq (Llama-3.3-70b-versatile)**: Generative LLM for legal reasoning, delivering lightning-fast inference.
+* **Groq (GPT-OSS-120B)**: Generative LLM for legal reasoning, delivering lightning-fast inference.
 * **FastEmbed (BAAI/bge-base-en-v1.5)**: High-performance CPU-optimized local embeddings (768-dim) for semantic search.
 * **FAISS (L2 Index)**: High-performance vector database for retrieving legal contexts.
 * **Redis**: Persistent multi-worker storage for active chat sessions (TTL-based).

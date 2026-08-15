@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # --- Configuration Constants ---
 _EMBEDDING_MODEL_NAME = "BAAI/bge-base-en-v1.5"
 _EMBEDDING_DIM = 768  # bge-base-en-v1.5 produces 768-dimensional embeddings
-_GENERATIVE_MODEL_NAME = "llama-3.3-70b-versatile"
+_GENERATIVE_MODEL_NAME = "openai/gpt-oss-120b"
 
 # --- Retrieval confidence thresholds (L2 distance) ---
 # bge embeddings are normalized, so L2² ≈ 2(1 - cosine).
